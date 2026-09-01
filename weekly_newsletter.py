@@ -50,6 +50,7 @@ PRODUCTS = [
 
 # Επιβεβαιωμένα raw image links (συμπλήρωσε όσα λείπουν όταν τα ανεβάσεις)
 IMAGE_MAP = {
+    2:  "https://raw.githubusercontent.com/pzaro/zarkolia-images/main/ZplastCream%20100gr.jpg",
     6:  "https://raw.githubusercontent.com/pzaro/zarkolia-images/main/Bruise%20Off%20%CE%BC%CE%B5%20%CF%86%CF%8C%CE%BD%CF%84%CE%BF.jpg",
     12: "https://raw.githubusercontent.com/pzaro/zarkolia-images/main/NUTRI%20MX%20PROBIOTIC%20PREMIUM.jpg",
 }
@@ -109,6 +110,40 @@ embargo→preview, EU-safe).
 """
 
 
+# ── Βήμα 1 μόνο: live πρόταση επίκαιρων θεμάτων (για επιλογή από τον χρήστη) ──
+def discover_topics(audience: str, product_n: int, n: int = 10) -> list:
+    """Τρέχει ΜΟΝΟ το Βήμα 1: live web search → ~n επίκαιρα θέματα προς επιλογή."""
+    client = anthropic.Anthropic()
+    system_prompt = PROMPT_FILE.read_text(encoding="utf-8")
+    aud = "ΦΑΡΜΑΚΟΠΟΙΟΥΣ" if audience.startswith("pharm") else "ΙΑΤΡΟΥΣ"
+    prod = f"{product_n}. {PRODUCTS[product_n - 1]}"
+    today = dt.date.today().isoformat()
+    msg = f"""Εκτέλεσε ΜΟΝΟ το Βήμα 1 (θεματολογία) — μη-διαδραστικά, χωρίς ερωτήσεις.
+Σημερινή ημερομηνία: {today}. Κοινό: {aud}. Προϊόν: {prod}.
+Κάνε ΠΡΑΓΜΑΤΙΚΟ web search για τα ΠΙΟ ΠΡΟΣΦΑΤΑ ιατρικά νέα ΑΥΤΗΣ της εβδομάδας
+(FDA/EMA εγκρίσεις, PRAC σήματα, ESC/ACC/ADA/ASCO late-breaking, νέες μελέτες).
+Πρότεινε {n} επίκαιρα θέματα «Ανάλυσης της Εβδομάδας».
+Επίστρεψε ΜΟΝΟ λίστα — μία γραμμή ανά θέμα, ΑΚΡΙΒΩΣ στη μορφή:
+ΚΩΔΙΚΟΣ|Τίτλος — μία σύντομη γραμμή περιγραφή
+(π.χ.  Α3|STAREE — στατίνες σε ≥70, −30% MACE, ESC 2026)
+Χωρίς εισαγωγικά, χωρίς αρίθμηση, χωρίς άλλο κείμενο πριν/μετά."""
+    resp = client.messages.create(
+        model=MODEL, max_tokens=2000, system=system_prompt,
+        tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 6}],
+        messages=[{"role": "user", "content": msg}],
+    )
+    text = "\n".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+    topics = []
+    for line in text.splitlines():
+        line = line.strip().lstrip("-•* ").strip()
+        if "|" in line:
+            code, desc = line.split("|", 1)
+            topics.append(f"{code.strip()} — {desc.strip()}")
+        elif line and len(topics) and len(line) > 8:
+            topics.append(line)
+    return topics[:n] if topics else ["(δεν επιστράφηκαν θέματα — δοκίμασε ξανά)"]
+
+
 # ── Κλήση Claude API με web_search ──────────────────────────────────────────
 def generate(audience: str, product_n: int, topics: str) -> str:
     client = anthropic.Anthropic()  # διαβάζει ANTHROPIC_API_KEY από env
@@ -119,7 +154,7 @@ def generate(audience: str, product_n: int, topics: str) -> str:
         model=MODEL,
         max_tokens=MAX_TOKENS,
         system=system_prompt,
-        tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 12}],
+        tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 6}],
         messages=[{"role": "user", "content": user_msg}],
     )
     # Ένωσε όλα τα text blocks (αγνόησε tool_use/tool_result)
