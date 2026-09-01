@@ -2,7 +2,7 @@ name: Weekly Zarkolia Newsletter
 
 on:
   schedule:
-    - cron: '0 6 * * 1'
+    - cron: '0 6 * * 1'      # κάθε Δευτέρα 06:00 UTC
   workflow_dispatch:
     inputs:
       audience:
