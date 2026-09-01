@@ -1,0 +1,42 @@
+name: Weekly Zarkolia Newsletter
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      audience:
+        description: 'Κοινό'
+        type: choice
+        options: [doctors, pharmacists]
+        default: doctors
+      product:
+        description: "Προϊόν ('auto' ή 1-14)"
+        default: auto
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Generate + email for review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          REVIEW_TO:  ${{ secrets.REVIEW_TO }}
+          SMTP_USER:  ${{ secrets.SMTP_USER }}
+          SMTP_PASS:  ${{ secrets.SMTP_PASS }}
+          SMTP_HOST:  smtp.gmail.com
+          SMTP_PORT:  '587'
+        run: |
+          python weekly_newsletter.py \
+            --audience "${{ github.event.inputs.audience || 'doctors' }}" \
+            --product  "${{ github.event.inputs.product  || 'auto' }}" || true
+      - name: Upload result for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: newsletter-${{ github.run_number }}
+          path: newsletters/
